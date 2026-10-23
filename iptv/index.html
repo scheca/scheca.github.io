@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f13">
+  <title>IPTV</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='6' width='28' height='20' rx='4' fill='%234f8cff'/%3E%3Cpath d='M13 11v10l8-5z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css?v=20261021b">
+  <!-- Interface size (Ajustes): small = html.tv, big = html.big (see app.css). Automatic: TV browsers
+       (big screen at a small CSS size) get the small one. -->
+  <script>try { const z = localStorage.getItem('iptv-scale') || '', c = document.documentElement.classList;
+    if (z === 's' || (!z && (/Android ?TV|GoogleTV|BRAVIA|\bAFT|SMART-?TV|SmartTV|Web0S|webOS|NetCast|Tizen|HbbTV|CrKey|\bTV\b/i.test(navigator.userAgent) || localStorage.getItem('iptv-tv') === '1'))) c.add('tv');
+    else if (z === 'l') c.add('big'); } catch {}</script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js" defer></script>
+  <script type="module" src="js/app.js?v=20261021b"></script>
+</head>
+<body>
+
+  <!-- Login -->
+  <section id="login" class="view" hidden>
+    <form id="loginForm" class="card" autocomplete="on">
+      <h1>IPTV</h1>
+      <label>Servidor
+        <input name="server" type="text" inputmode="url" placeholder="http://servidor:puerto" required autocapitalize="off" spellcheck="false">
+      </label>
+      <label>Usuario
+        <input name="username" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+      </label>
+      <label>Contraseña
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <details id="advanced">
+        <summary>Avanzado</summary>
+        <label>Proxy (opcional)
+          <input name="proxy" type="text" inputmode="url" placeholder="https://mi-proxy.workers.dev" autocapitalize="off" spellcheck="false">
+        </label>
+        <p class="hint">Necesario si tu servidor es <code>http://</code> o no permite CORS. Ver README.</p>
+      </details>
+      <p id="loginWarn" class="warn" hidden></p>
+      <p id="loginError" class="error" hidden></p>
+      <button type="submit" class="primary">Entrar</button>
+    </form>
+  </section>
+
+  <!-- Main -->
+  <section id="main" class="view" hidden>
+    <header class="top">
+      <nav class="tabs" role="tablist">
+        <button data-tab="home" role="tab">Inicio</button>
+        <button data-tab="live" role="tab">Directo</button>
+        <button data-tab="vod" role="tab">Películas</button>
+        <button data-tab="series" role="tab">Series</button>
+        <button data-tab="agenda" role="tab">Agenda</button>
+      </nav>
+      <button id="recBanner" hidden></button>
+      <div class="search-box">
+        <input id="search" type="search" placeholder="Buscar canales, partidos, programas…" autocomplete="off" spellcheck="false">
+        <div id="recentQ" hidden></div>
+      </div>
+      <button id="refresh" class="icon" title="Actualizar listas" aria-label="Actualizar">⟳</button>
+      <button id="settingsBtn" class="icon" title="Ajustes" aria-label="Ajustes">⚙</button>
+    </header>
+    <div id="home" hidden></div>
+    <div class="panes">
+      <aside id="folders" class="pane"></aside>
+      <main id="itemsPane" class="pane">
+        <div class="pane-head">
+          <button id="back" class="icon" aria-label="Atrás">‹</button>
+          <h2 id="listTitle"></h2>
+          <span id="listCount" class="muted"></span>
+          <span class="spacer"></span>
+          <button id="sortBtn" class="icon txt" hidden>⇅ Ordenar</button>
+          <button id="mineBtn" class="icon txt" hidden>Mostrar todos<span id="mineCount"></span></button>
+          <button id="deadBtn" class="icon txt" hidden>Ocultar sin señal<span id="deadCount"></span></button>
+          <button id="gridBtn" class="icon txt" title="Guía de la carpeta" aria-label="Guía de la carpeta" hidden>☰ Guía</button>
+          <button id="mosaicBtn" class="icon" title="Mosaico" aria-label="Mosaico" hidden>▦</button>
+        </div>
+        <div id="items"></div>
+        <div id="series" hidden></div>
+        <div id="mosaic" hidden></div>
+        <div id="grid" hidden></div>
+        <div id="empty" class="empty" hidden>
+          <p id="emptyText"></p>
+          <p id="emptyDiag" class="diag"></p>
+          <button id="emptyRetry" hidden>Reintentar</button>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- Player -->
+  <div id="player" hidden>
+    <video id="video" controls playsinline poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
+    <div id="pArt" hidden></div>
+    <div class="pbar">
+      <button id="pClose" class="icon" aria-label="Cerrar">✕</button>
+      <button id="pLast" class="icon txt" aria-label="Volver al canal anterior" hidden>⇆ Anterior</button>
+      <button id="pList" class="icon" aria-label="Lista de canales" hidden>☰</button>
+      <div class="ptext">
+        <div id="pTitle"></div>
+        <div id="pInfo" hidden></div>
+        <div id="pBuf" hidden></div>
+      </div>
+      <button id="pStart" class="icon txt" aria-label="Ver desde el inicio" hidden>⏮ Inicio</button>
+      <button id="pRec" class="icon txt" aria-label="Grabar en la Raspberry Pi" hidden>⏺ Grabar</button>
+      <button id="pGuide" class="icon txt" aria-label="Guía" hidden>Guía</button>
+      <button id="pAlt" class="icon txt" aria-label="Probar otra versión del canal" hidden>⇄ Versión</button>
+      <button id="pBackup" class="icon txt" aria-label="Canales de respaldo" hidden>Respaldo</button>
+      <button id="pFav" class="icon star" aria-label="Favorito" hidden>★</button>
+      <button id="pAudio" class="icon txt" aria-label="Pista de audio" hidden>Audio</button>
+      <button id="pSubs" class="icon txt" aria-label="Subtítulos" hidden>CC</button>
+      <button id="pPrev" class="icon" aria-label="Anterior">‹</button>
+      <button id="pNext" class="icon" aria-label="Siguiente">›</button>
+      <button id="pZoom" class="icon txt" aria-label="Encuadre de la imagen">Zoom</button>
+      <button id="pFs" class="icon" aria-label="Pantalla completa">⛶</button>
+    </div>
+    <div id="pCu" hidden>
+      <button id="cuPlay" class="icon" aria-label="Pausa">❚❚</button>
+      <button id="cuBack" class="icon txt" data-s="-300" aria-label="Atrás 5 minutos">« 5 min</button>
+      <button id="cuBack30" class="icon txt" data-s="-30" aria-label="Atrás 30 segundos">« 30 s</button>
+      <span id="cuTime"></span>
+      <div id="cuTrack"><div id="cuAvail"></div><div id="cuFill"></div></div>
+      <span id="cuEnd"></span>
+      <button id="cuFwd30" class="icon txt" data-s="30" aria-label="Adelante 30 segundos">30 s »</button>
+      <button id="cuFwd" class="icon txt" data-s="300" aria-label="Adelante 5 minutos">5 min »</button>
+      <button id="cuLive" class="icon txt" hidden>Directo</button>
+    </div>
+    <div id="pMsg"></div>
+    <div id="pFail" hidden>
+      <button id="pRetry" class="primary">Reintentar</button>
+      <button id="pOther" hidden>⇄ Probar otra versión</button>
+      <button id="pChoose" hidden>☰ Elegir otro canal</button>
+      <button id="pQuit">✕ Cerrar</button>
+    </div>
+    <div id="pGest" hidden></div>
+    <button id="pPlay" class="primary" hidden>▶ Reproducir</button>
+    <div id="pMenu" hidden></div>
+    <div id="pilot" hidden></div>
+    <aside id="zap" hidden>
+      <div class="z-head">
+        <button id="zBack" class="icon txt">‹ Carpetas</button>
+        <h3 id="zTitle"></h3>
+        <button id="zClose" class="icon" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="zList"></div>
+    </aside>
+  </div>
+
+  <!-- Settings -->
+  <dialog id="settings">
+    <form method="dialog" class="card">
+      <h2>Ajustes</h2>
+      <div id="accountInfo" class="muted"></div>
+      <label>Tamaño de la interfaz
+        <select id="scaleInput">
+          <option value="">Automático (más pequeño en la tele)</option>
+          <option value="s">Pequeño</option>
+          <option value="m">Normal</option>
+          <option value="l">Grande</option>
+        </select>
+      </label>
+      <label class="check"><input id="vodInput" type="checkbox"> Mostrar Películas y Series</label>
+      <label class="check" id="autoRecRow"><input id="autoRecInput" type="checkbox"> Grabar en la Raspberry los partidos de mis equipos</label>
+      <div class="actions">
+        <button type="button" id="foldersBtn">Carpetas visibles…</button>
+        <button type="button" id="sportsBtn">Deportes de la agenda…</button>
+        <button type="button" id="teamsBtn">Mis equipos…</button>
+        <button type="button" id="histBtn">Vaciar «Seguir viendo»</button>
+      </div>
+      <label>Buffer inicial
+        <select id="bufferInput">
+          <option value="5">5 s (menos retraso)</option>
+          <option value="10">10 s</option>
+          <option value="20">20 s</option>
+          <option value="30">30 s</option>
+          <option value="60">60 s (más estable)</option>
+        </select>
+      </label>
+      <label>Buffer máximo (crece solo si hay cortes frecuentes)
+        <select id="bufferMaxInput">
+          <option value="10">10 s</option>
+          <option value="20">20 s</option>
+          <option value="30">30 s</option>
+          <option value="60">60 s</option>
+          <option value="90">90 s</option>
+          <option value="120">120 s</option>
+        </select>
+      </label>
+      <label>Mosaico: segundos en cada canal antes de capturar
+        <select id="scanInput">
+          <option value="1">1 s (más rápido)</option>
+          <option value="2">2 s</option>
+          <option value="4">4 s</option>
+          <option value="6">6 s</option>
+        </select>
+      </label>
+      <label>Ajuste de hora del diferido (si empieza antes o después de lo que debe)
+        <select id="cuShiftInput">
+          <option value="-3">−3 h</option><option value="-2">−2 h</option><option value="-1">−1 h</option>
+          <option value="0">Ninguno</option>
+          <option value="1">+1 h</option><option value="2">+2 h</option><option value="3">+3 h</option>
+        </select>
+      </label>
+      <label class="check"><input id="epgInput" type="checkbox"> Mostrar guía (EPG) en la lista de canales</label>
+      <label class="check"><input id="autoFsInput" type="checkbox"> Pantalla completa automática al abrir un canal</label>
+      <button type="button" id="diagBtn">Diagnóstico de conexión</button>
+      <pre id="diagOut" class="diag" hidden></pre>
+      <label>Proxy (opcional)
+        <input id="proxyInput" type="text" inputmode="url" placeholder="https://mi-proxy.workers.dev" autocapitalize="off" spellcheck="false">
+      </label>
+      <div class="actions">
+        <button value="save" class="primary">Guardar</button>
+        <button value="pin">Cambiar PIN adultos</button>
+        <button value="cache">Borrar caché</button>
+        <button value="logout" class="danger">Cerrar sesión</button>
+        <button value="close">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Channel guide (catch-up) -->
+  <dialog id="guide">
+    <div class="card wide">
+      <div class="g-head">
+        <h2 id="gTitle"></h2>
+        <button id="gClose" class="icon" aria-label="Cerrar">✕</button>
+      </div>
+      <p id="gNote" class="hint"></p>
+      <div id="gBody"></div>
+      <div class="actions">
+        <button id="gManual">⏺ Programar a mano</button>
+        <button id="gBackups">Canales de respaldo</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Recording / backup channels -->
+  <dialog id="planDialog">
+    <form method="dialog" class="card" id="planForm">
+      <h2 id="planTitle"></h2>
+      <p id="planHint" class="hint"></p>
+      <div id="planFields">
+        <label>Título <input id="planName" type="text" autocomplete="off"></label>
+        <label>Empieza <input id="planStart" type="datetime-local"></label>
+        <label>Duración
+          <select id="planDur">
+            <option value="30">30 min</option><option value="60">1 h</option><option value="90">1 h 30</option>
+            <option value="120">2 h</option><option value="150">2 h 30</option><option value="180">3 h</option><option value="240">4 h</option>
+          </select>
+        </label>
+      </div>
+      <div class="plan-bk">
+        <div class="muted">Canales de respaldo (si el principal falla o se corta)</div>
+        <div id="planChips" class="chips"></div>
+        <button type="button" id="planAuto" hidden>↺ Usar los automáticos</button>
+        <input id="planSearch" type="search" placeholder="Añadir canal: escribe su nombre" autocomplete="off" spellcheck="false">
+        <div id="planResults"></div>
+      </div>
+      <div class="actions">
+        <button value="save" class="primary">Guardar</button>
+        <button value="stop" id="planStop" hidden>■ Detener ahora</button>
+        <button value="delete" id="planDelete" class="danger">Borrar</button>
+        <button value="cancel" formnovalidate>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Agenda: which live channel a TV channel name is -->
+  <dialog id="aliasDialog">
+    <form method="dialog" class="card">
+      <h2 id="aliasTitle"></h2>
+      <p id="aliasHint" class="hint"></p>
+      <input id="aliasSearch" type="search" placeholder="Nombre del canal en tu lista" autocomplete="off" spellcheck="false">
+      <div id="aliasResults" class="alias-results"></div>
+      <div class="actions">
+        <button type="button" id="aliasClear" class="danger" hidden>Quitar asignación</button>
+        <button value="cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Single connection busy with a recording -->
+  <dialog id="busyDialog">
+    <form method="dialog" class="card">
+      <h2>Grabación en marcha</h2>
+      <p id="busyText" class="hint"></p>
+      <div class="actions">
+        <button value="rec" class="primary">Ver la grabación</button>
+        <button value="stop" class="danger">⏹ Detener la grabación y ver el canal</button>
+        <button value="cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- PIN -->
+  <dialog id="pinDialog">
+    <form method="dialog" class="card" id="pinForm">
+      <h2 id="pinTitle"></h2>
+      <p id="pinHint" class="hint"></p>
+      <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN">
+      <input id="pinInput2" type="password" inputmode="numeric" autocomplete="off" placeholder="Repite el PIN" hidden>
+      <p id="pinError" class="error" hidden></p>
+      <div class="actions">
+        <button value="ok" class="primary">Aceptar</button>
+        <button value="cancel" formnovalidate>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Actions of a match / programme -->
+  <!-- Options of a match / programme; with a picture and synopsis it is its info sheet -->
+  <dialog id="menuDialog">
+    <div class="card">
+      <div id="menuArt" class="menu-art" hidden></div>
+      <h2 id="menuTitle"></h2>
+      <p id="menuSub" class="hint"></p>
+      <p id="menuInfo" class="menu-info" hidden></p>
+      <p id="menuDesc" class="menu-desc" hidden></p>
+      <div id="menuList" class="menu-list"></div>
+      <div class="actions"><button id="menuClose">Cerrar</button></div>
+    </div>
+  </dialog>
+
+  <!-- Checklists: visible folders, agenda sports, favourite teams -->
+  <dialog id="checkDialog">
+    <form method="dialog" class="card">
+      <h2 id="checkTitle"></h2>
+      <p id="checkHint" class="hint"></p>
+      <div id="checkQuick" class="actions"></div>
+      <input id="checkSearch" type="search" placeholder="Filtrar" autocomplete="off" spellcheck="false">
+      <div id="checkList" class="check-list"></div>
+      <div class="actions">
+        <button value="save" class="primary">Guardar</button>
+        <button value="cancel" formnovalidate>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Reminder: a programme or match is starting -->
+  <div id="remind" hidden>
+    <div id="remindText"></div>
+    <button id="remindGo" class="primary">▶ Ver</button>
+    <button id="remindX" class="icon" aria-label="Descartar">✕</button>
+  </div>
+
+  <div id="loading" hidden><div class="spinner"></div><span id="loadingText"></span></div>
+  <div id="toast" hidden></div>
+</body>
+</html>

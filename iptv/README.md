@@ -39,6 +39,31 @@ Ten en cuenta:
 - Cloudflare no deja que un Worker llame a un servidor identificado **solo por su IP** (error 1003). Si tu proveedor usa una IP, despliega el mismo `worker.js` en [Deno Deploy](https://deno.com/deploy), que es compatible.
 - El plan gratuito permite 100 000 peticiones al día. Una hora de directo son unas 900, así que alcanza para uso personal.
 
+### Proxy en tu Raspberry Pi (HTTPS)
+
+El mismo `worker.js` se puede ejecutar en cualquier equipo con **Node 18 o superior** gracias a [`proxy/server.mjs`](proxy/server.mjs), que lo carga tal cual y sirve por HTTPS. Como la app está en HTTPS, el navegador **exige** que el proxy también lo sea y que el certificado sea válido.
+
+1. Copia `proxy/worker.js`, `proxy/server.mjs` y `proxy/iptv-proxy.service` a `~/iptv-proxy/` en la Pi (`node -v` debe dar 18 o más; si no, instala Node desde NodeSource).
+2. **Certificado** de Let's Encrypt para tu dominio de DuckDNS. Con la validación por DNS no hace falta abrir el puerto 80 (con [acme.sh](https://github.com/acmesh-official/acme.sh)):
+   ```sh
+   export DuckDNS_Token=<tu token de DuckDNS>
+   acme.sh --issue --dns dns_duckdns -d tu-dominio.duckdns.org
+   sudo mkdir -p /etc/iptv-proxy
+   acme.sh --install-cert -d tu-dominio.duckdns.org \
+     --fullchain-file /etc/iptv-proxy/fullchain.pem --key-file /etc/iptv-proxy/privkey.pem \
+     --reloadcmd "chown <usuario> /etc/iptv-proxy/*.pem && systemctl restart iptv-proxy"
+   ```
+3. Edita `iptv-proxy.service` (usuario y, si quieres, `ALLOWED_HOSTS`) y actívalo:
+   ```sh
+   sudo cp ~/iptv-proxy/iptv-proxy.service /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now iptv-proxy
+   journalctl -u iptv-proxy -f
+   ```
+4. En el router, redirige un puerto externo (p. ej. 8080) al **8443** de la Pi.
+5. En la app, en **Proxy**: `https://tu-dominio.duckdns.org:8080`.
+
+Para probarlo: `curl -i 'https://tu-dominio.duckdns.org:8080/?url=http%3A%2F%2Fexample.com%2F'`. Solo `ALLOWED_ORIGINS` (por defecto `https://scheca.github.io` en el servicio) y `ALLOWED_HOSTS` limitan quién puede usarlo: ajústalos o tu Pi será un proxy abierto. Si cierras la app, el proxy corta la descarga con el proveedor al momento.
+
 ## Qué incluye
 
 - **Inicio**: partidos en directo, «Seguir viendo», favoritos y grabaciones.

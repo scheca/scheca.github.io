@@ -1,0 +1,20 @@
+[Unit]
+Description=IPTV proxy (worker.js on Node, HTTPS)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=<usuario>
+WorkingDirectory=/home/<usuario>/iptv-proxy
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=5
+Environment=PORT=8443
+Environment=TLS_CERT=/etc/iptv-proxy/fullchain.pem
+Environment=TLS_KEY=/etc/iptv-proxy/privkey.pem
+Environment=ALLOWED_ORIGINS=https://scheca.github.io
+# Recommended: only your provider, e.g. mi-proveedor.com:8080
+#Environment=ALLOWED_HOSTS=mi-proveedor.com:8080
+
+[Install]
+WantedBy=multi-user.target
